@@ -546,7 +546,10 @@
   // 每个块 = 固定冻结列（期号/日期 + 开奖号码 百十个，共 5 列）+ 该块自身的列
   var MOB_FRZ_IDS = ['base', 'prize'];
   var MOB_H = window.matchMedia('(max-width:700px)');
-  var MOB_CELL_W = 44;                 // 手机端单元格宽度，缩放按钮改这个值后重绘
+  var MOB_CELL_W = 44;                 // 手机端数据块单元格宽度，缩放按钮改这个值后重绘
+  // 手机端冻结列（期号·日期·百·十·个）单独收窄：期号/日期按文字实际宽度给，百十个只需容纳一位数字
+  // （配合页面 @media(max-width:700px) 里把冻结列字号降到 .68rem，保证 7 位期号与 5 位日期不被截断）
+  var MOB_FRZ_W = [50, 37, 20, 20, 20];
   var MOB_Z = [
     { name: '号码走势（百/十/个位）', ids: ['num'] },
     { name: '和值走势', ids: ['smg'] },
@@ -628,7 +631,7 @@
       if (i < 0) i = 0;
       var secs = mobPick(all, MOB_FRZ_IDS).concat(mobPick(all, blocks[i].ids));
       W = MOB_CELL_W;
-      renderTrend(hostId + '-mobhost', secs, frzWidth(secs, 'prize'));
+      renderTrend(hostId + '-mobhost', secs, frzWidth(secs, 'prize'), MOB_FRZ_W);
       panel.querySelector('.mob-idx').textContent = '第 ' + (i + 1) + '/' + blocks.length + ' 块 · ' + blocks[i].name;
     }
     draw();
@@ -646,7 +649,7 @@
     var hs = t.querySelectorAll('tr.r1 th.frz');
     for (i = 0; i < hs.length; i++) hs[i].style.left = lefts[+hs[i].getAttribute('data-fs')] + 'px';
   }
-  function renderTrend(hostId, sections, frzN) {
+  function renderTrend(hostId, sections, frzN, frzW) {
     var host = document.getElementById(hostId);
     if (!host) return;
     var L = makeColInfo(sections);
@@ -677,7 +680,9 @@
         h2.push('<th' + (hc.length ? ' class="' + hc.join(' ') + '"' : '') + a2 + ' style="background-color:var(--bg);background-image:linear-gradient(' + tint + ',' + tint + ')">' + s.subs[k] + '</th>');
       }
     });
-    for (var ci = 0; ci < NC; ci++) cg.push('<col style="width:' + W + 'px">');
+    for (var ci = 0; ci < NC; ci++) {
+      cg.push('<col style="width:' + ((frzW && ci < frzW.length) ? frzW[ci] : W) + 'px">');   // frzW：手机端冻结列专用宽度
+    }
 
     var rows = [];
     for (var ri = 0; ri < N; ri++) {

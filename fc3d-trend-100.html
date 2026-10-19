@@ -153,6 +153,9 @@
       #trend .chart-figure > .chart-wrap,
       #gtrend .chart-figure > .chart-wrap{ display:none; }
       .mob-panel{ display:block; }
+      /* 冻结列（期号·日期·百十个）在手机上刻意收窄，字号同步微调，保证期号/日期不被截断 */
+      .mob-panel .trend-table td.frz,
+      .mob-panel .trend-table thead tr.r2 th.frz{ font-size:.68rem; }
     }
     @media print{
       body{ background:#fff; padding:0; }
@@ -388,7 +391,7 @@
 </article>
 
 <script src="./_shared/js/echarts.min.js?v=17"></script>
-<script src="./assets/charts.js?v=23"></script>
+<script src="./assets/charts.js?v=25"></script>
 <script>
   // 每次打开页面都绕过浏览器缓存重新拉取最新 data.js，加载完成后调用 FD3Render 渲染，
   // 从而保证「每次打开界面就刷新到最新开奖号」。
