@@ -13,6 +13,7 @@
   var MONO = "'JetBrainsMono',ui-monospace,Consolas,monospace";
   var CHARTS = [];        // ECharts 实例；重复渲染前先销毁，避免重复初始化
   var DRAG_BOUND = false; // 表格拖拽事件只绑定一次
+  var MOB_BOUND = false;  // 手机端/桌面端切换的尺寸监听只绑定一次
 
   // ---------- 可重复调用：页面每次打开重新拉取最新 data.js 后再渲染一次 ----------
   window.FD3Render = function () {
@@ -540,6 +541,98 @@
     return n;
   }
   var FRZ_Z = frzWidth(SECTIONS_Z, 'prize'), FRZ_G = frzWidth(SECTIONS_G, 'type');
+
+  // ---------- 手机端（小屏 ≤700px）分块视图：每页只显示一个块，可左右/上下平移、可缩放 ----------
+  // 每个块 = 固定冻结列（期号/日期 + 开奖号码 百十个，共 5 列）+ 该块自身的列
+  var MOB_FRZ_IDS = ['base', 'prize'];
+  var MOB_H = window.matchMedia('(max-width:700px)');
+  var MOB_CELL_W = 44;                 // 手机端单元格宽度，缩放按钮改这个值后重绘
+  var MOB_Z = [
+    { name: '号码走势（百/十/个位）', ids: ['num'] },
+    { name: '和值走势', ids: ['smg'] },
+    { name: '跨度走势', ids: ['spg'] },
+    { name: '合值走势（和尾）', ids: ['tlg'] },
+    { name: '大小组合', ids: ['cdx'] },
+    { name: '质合组合', ids: ['czh'] },
+    { name: '奇偶组合', ids: ['cjo'] },
+    { name: '阴阳组合', ids: ['cyy'] },
+    { name: '012路组合', ids: ['l012'] },
+    { name: '复隔中组合', ids: ['cfgz'] },
+    { name: '孤邻传组合', ids: ['cglt'] }
+  ];
+  var MOB_G = [
+    { name: '综合组选走势（小部/大部/类型）', ids: ['gnum_s', 'gnum_b', 'type'] },
+    { name: '和值走势', ids: ['smg'] },
+    { name: '跨度走势', ids: ['spg'] },
+    { name: '合值走势（和尾）', ids: ['tlg'] },
+    { name: '复隔中·孤邻传（速览 6 列）', ids: ['fz6'] },
+    { name: '全量0-9 · 复隔中/孤邻传', ids: ['g:复', 'g:隔', 'g:中', 'g:孤', 'g:邻', 'g:传'] },
+    { name: '小部0-4 · 复隔中/孤邻传', ids: ['q0:复', 'q0:隔', 'q0:中', 'q0:孤', 'q0:邻', 'q0:传'] },
+    { name: '大部5-9 · 复隔中/孤邻传', ids: ['q1:复', 'q1:隔', 'q1:中', 'q1:孤', 'q1:邻', 'q1:传'] }
+  ];
+  function mobPick(all, ids) {
+    var out = [];
+    ids.forEach(function (id) {
+      for (var i = 0; i < all.length; i++) { if (all[i].id === id) { out.push(all[i]); break; } }
+    });
+    return out;
+  }
+  // 在 host（#trend-table / #gtrend-table）所在 figure 内插一块手机端面板：上一块/下一块/下拉选择 + 缩放
+  function mobRender(hostId, all, blocks) {
+    var host = document.getElementById(hostId);
+    if (!host || !host.parentNode || !host.parentNode.parentNode) return;
+    var panelId = hostId + '-mob';
+    var panel = document.getElementById(panelId);
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'mob-panel';
+      panel.id = panelId;
+      panel.innerHTML =
+        '<div class="mob-nav">' +
+          '<button type="button" class="mob-btn" data-mob="-1" aria-label="上一块">&#8249;</button>' +
+          '<select class="mob-sel" aria-label="选择图块"></select>' +
+          '<button type="button" class="mob-btn" data-mob="1" aria-label="下一块">&#8250;</button>' +
+        '</div>' +
+        '<div class="mob-wrap"><div id="' + hostId + '-mobhost"></div></div>' +
+        '<div class="mob-meta">' +
+          '<span class="mob-idx"></span>' +
+          '<span class="mob-zoom">' +
+            '<button type="button" class="mob-btn" data-zoom="-1" aria-label="缩小">&#8722;</button>' +
+            '<button type="button" class="mob-btn" data-zoom="1" aria-label="放大">&#43;</button>' +
+          '</span>' +
+        '</div>';
+      host.parentNode.parentNode.insertBefore(panel, host.parentNode);
+      var sel = panel.querySelector('.mob-sel');
+      blocks.forEach(function (b, i) {
+        var o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = (i + 1) + '/' + blocks.length + ' · ' + b.name;
+        sel.appendChild(o);
+      });
+      panel.querySelector('.mob-nav').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-mob]') : null;
+        if (!b) return;
+        sel.selectedIndex = Math.max(0, Math.min(blocks.length - 1, sel.selectedIndex + (+b.getAttribute('data-mob'))));
+        draw();
+      });
+      sel.addEventListener('change', function () { draw(); });
+      panel.querySelector('.mob-zoom').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-zoom]') : null;
+        if (!b) return;
+        MOB_CELL_W = Math.max(26, Math.min(68, MOB_CELL_W + 6 * (+b.getAttribute('data-zoom'))));
+        draw();
+      });
+    }
+    function draw() {
+      var i = panel.querySelector('.mob-sel').selectedIndex;
+      if (i < 0) i = 0;
+      var secs = mobPick(all, MOB_FRZ_IDS).concat(mobPick(all, blocks[i].ids));
+      W = MOB_CELL_W;
+      renderTrend(hostId + '-mobhost', secs, frzWidth(secs, 'prize'));
+      panel.querySelector('.mob-idx').textContent = '第 ' + (i + 1) + '/' + blocks.length + ' 块 · ' + blocks[i].name;
+    }
+    draw();
+  }
   function applyFrozen(t) {
     if (!t) return;
     var n = +t.getAttribute('data-frz') || 0, i;
@@ -710,8 +803,20 @@
       '<tbody>' + rows.join('') + '</tbody></table>';
     applyFrozen(host.querySelector('table'));
   }
-  renderTrend('trend-table', SECTIONS_Z, FRZ_Z);
-  renderTrend('gtrend-table', SECTIONS_G, FRZ_G);
+  // 小屏走「一页一块」的手机端视图；桌面端维持原有的整表渲染
+  if (MOB_H.matches) {
+    mobRender('trend-table', SECTIONS_Z, MOB_Z);
+    mobRender('gtrend-table', SECTIONS_G, MOB_G);
+  } else {
+    W = 44;
+    renderTrend('trend-table', SECTIONS_Z, FRZ_Z);
+    renderTrend('gtrend-table', SECTIONS_G, FRZ_G);
+  }
+  if (!MOB_BOUND) {
+    MOB_BOUND = true;
+    if (MOB_H.addEventListener) MOB_H.addEventListener('change', function () { window.FD3Render(); });
+    else if (MOB_H.addListener) MOB_H.addListener(function () { window.FD3Render(); });
+  }
 
   // ---------- 列宽 / 行高手动实时调整（拖表头调列宽，拖首列调行高） ----------
   // 事件委托到 document，只需绑定一次（重复渲染时表格元素被重建，委托仍然生效）
@@ -732,6 +837,7 @@
     }
     document.addEventListener('mousedown', function (e) {
       if (e.button !== 0) return;
+      if (MOB_H.matches) return;          // 手机端用平移手势，不做拖拽调列宽/行高
       var cell = e.target.closest ? e.target.closest('.trend-table th, .trend-table td') : null;
       if (!cell) return;
       var table = cell.closest('.trend-table'); if (!table) return;
